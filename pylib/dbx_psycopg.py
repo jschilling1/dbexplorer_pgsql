@@ -24,6 +24,7 @@ import dbxlib
 try:
     # Import the (default) pq5 library version of postgreSQL.
     import psycopg2
+    log.info('using psycop2 version %s' % psycopg2.__version__)
     loaded = True
     disabled_reason = None
 except ImportError:
@@ -108,7 +109,7 @@ class Connection(object):
 
     def getConnectionDisplayValues(self):
         return "%s:%s" % (self.host, self.dbname)
-        
+
 class ColumnInfo(object):
     def __init__(self, name, type, nullable, default_value,
                  max_length, is_primary_key):
@@ -132,7 +133,7 @@ class ColumnInfo(object):
             'default value': 'default_value',
             'primary key?': 'is_primary_key',
             }
-        
+
     def __repr__(self):
         return ("<ColumnInfo: name:%r, "
                 + "type:%r, "
@@ -174,11 +175,11 @@ class Database(dbxlib.CommonDatabase):
 
     def getConnectionDisplayInfo(self):
         return self.connection.getConnectionDisplayValues()
-        
+
     @contextmanager
     def connect(self, commit=False, cu=None):
         """ See dbx_sqlite3.py::connect docstring for full story
-        @param commit {bool} 
+        @param commit {bool}
         @param cu {sqlite3.Cursor}
         """
         if cu is not None:
@@ -201,7 +202,7 @@ class Database(dbxlib.CommonDatabase):
                 conn.close()
 
     # get metadata about the database and tables
-                
+
     def listDatabases(self):
         try:
             query = """select datname from pg_database"""
@@ -216,7 +217,7 @@ class Database(dbxlib.CommonDatabase):
         except psycopg2.DatabaseError, ex:
             raise DatabaseError(ex)
 
-                
+
     def listAllTablePartsByType(self, dbname, typeName):
         try:
             query = """select table_name
@@ -236,10 +237,10 @@ class Database(dbxlib.CommonDatabase):
             raise DatabaseError(ex)
         except Exception, ex:
             log.exception("listAllTablePartsByType(typeName:%s)", typeName)
-        
+
     def listAllTableNames(self, dbname):
         return self.listAllTablePartsByType(dbname, 'BASE TABLE')
-                
+
     def listAllIndexNames(self):
         return self.listAllTablePartsByType(dbname, 'INDEX') #TODO: Verify this
 
@@ -261,7 +262,7 @@ class Database(dbxlib.CommonDatabase):
         return self.listAllTablePartsByType(dbname, 'TRIGGER') # TODO: Verify this
 
     #TODO: Add views
-    
+
     def _save_table_info(self, table_name):
         if ';' in table_name:
             raise Exception("Unsafe table_name: %s" % (table_name,))
@@ -289,7 +290,7 @@ class Database(dbxlib.CommonDatabase):
             for row in cu.fetchall():
                 log.debug("save_table_info: index_query: got row: %s", row)
                 indexed_columns[row[0]] = row[1]
-                
+
             cu.execute(main_query)
             col_info = []
             log.debug("save_table_info: main_query: rowcount: %d", cu.rowcount)
@@ -304,7 +305,7 @@ class Database(dbxlib.CommonDatabase):
 
     def _typeForPostgres(self, typeName):
         return typeName in ('date', 'datetime', 'point')
-    
+
     def _convert(self, col_info_block, row_data):
         """ Convert each item into a string.  Then return an array of items.
         """
@@ -312,35 +313,15 @@ class Database(dbxlib.CommonDatabase):
         idx = 0
         for value in row_data:
             col_info = col_info_block[idx]
-            type = col_info.type
+            #pg_type = col_info.type
             log.debug("_convert: value: %s, type:%s", value, type)
-            if type == u'integer':
-                if value is None:
-                    new_row_data.append("")
-                else:
-                    try:
-                        new_row_data.append("%d" % value)
-                    except TypeError:
-                        log.error("Can't append value as int: %r", value)
-                        new_row_data.append("%r" % value)
-            elif type == u'real':
-                new_row_data.append("%r" % value)
-            elif (type in (u'STRING', u'TEXT')
-                  or 'VARCHAR' in type
-                  or type.startswith('character')):
-                new_row_data.append(value)
-            elif self._typeForPostgres(type):
-                new_row_data.append(str(value))
-            elif type == 'BLOB':
-                # To get the data of a blob:
-                # len(value) => size, str(value) => str repr,
-                # but how would we know how to represent it?
-                if value is None:
-                    log.info("blob data is: None")
-                    value = ""
-                new_row_data.append("<BLOB: %d chars>" % (len(value),))
-            else:
-                new_row_data.append('%r' % value)
+
+            try:
+                str_value = str(value) if value != None else ''
+                new_row_data.append(str_value)
+            except ValueError:
+                log.error("Can't convert value for column %r to str" % col_info.name)
+
             idx += 1
         return new_row_data
 
@@ -454,6 +435,6 @@ class Database(dbxlib.CommonDatabase):
 
     def getIndexInfo(self, indexName, res):
         XXX # Implement!
-        
+
     def getTriggerInfo(self, triggerName, res):
         XXX # Implement!
